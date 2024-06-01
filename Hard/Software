@@ -1,0 +1,14 @@
+Beschreibung
+Dieses Arduino-Programm implementiert ein interaktives Quiz auf einem Touchscreen-Display. 
+Das Quiz besteht aus 10 Fragen, wobei der Benutzer die richtige Antwort aus vier Optionen auswählen muss. 
+Am Ende des Quiz werden die Ergebnisse angezeigt und der Benutzer hat die Möglichkeit, das Quiz neu zu starten.
+
+Hardware-Anforderungen
+- Arduino GIGA R1 WiFi
+- GIGA Display
+
+Software-Anforderungen
+- Arduino IDE
+- LVGL Bibliothek
+- Arduino_H7_Video Bibliothek
+- Arduino_GigaDisplayTouch Bibliothek
