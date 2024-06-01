@@ -1,0 +1,200 @@
+#include "Arduino_H7_Video.h"
+#include "lvgl.h"
+#include "Arduino_GigaDisplayTouch.h"
+
+// Display und Touchscreen-Initialisierung
+Arduino_H7_Video Display(800, 480, GigaDisplayShield);
+Arduino_GigaDisplayTouch TouchDetector;
+
+// Globale Variablen für LVGL-Objekte
+lv_obj_t* grid;        // Grid für die Anordnung von Inhalten
+lv_obj_t* btnm;        // Button-Matrix für Pagination
+lv_obj_t* restartBtn;  // Button zum Neustarten des Quiz
+
+// Pagination-Parameter
+int currentPage = 0;
+int totalPages = 11;    // Gesamtanzahl der Seiten (10 Fragen + 1 Ergebnisseite)
+
+// Struktur für die Antwortauswahl
+struct Answer {
+    const char* correctAnswer;    // Richtige Antwort
+    const char* selectedAnswer;   // Vom Benutzer ausgewählte Antwort
+};
+
+Answer answers[10]; // Array für die Antworten auf zehn Fragen
+
+// Funktion zum Erstellen einer Seite mit Inhalten
+void createPage(int page);
+
+// Funktion zum Hinzufügen von Inhalten zum Grid (Frage und Antworten mit Buttons)
+void addContentToGrid(const char* question, const char* answerA, const char* answerB, const char* answerC, const char* answerD, const char* correctAnswer) {
+    // Frage hinzufügen
+    lv_obj_t* lblQuestion = lv_label_create(grid);
+    lv_label_set_text(lblQuestion, question);
+    lv_obj_set_grid_cell(lblQuestion, LV_GRID_ALIGN_STRETCH, 0, 2, LV_GRID_ALIGN_STRETCH, 0, 1);
+
+    // Antwort A hinzufügen
+    lv_obj_t* btnAnswerA = lv_btn_create(grid);
+    lv_obj_set_grid_cell(btnAnswerA, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
+    lv_obj_add_event_cb(btnAnswerA, [](lv_event_t* e) {
+        answers[currentPage].selectedAnswer = "A";
+    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lblAnswerA = lv_label_create(btnAnswerA);
+    lv_label_set_text(lblAnswerA, answerA);
+
+    // Antwort B hinzufügen
+    lv_obj_t* btnAnswerB = lv_btn_create(grid);
+    lv_obj_set_grid_cell(btnAnswerB, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
+    lv_obj_add_event_cb(btnAnswerB, [](lv_event_t* e) {
+        answers[currentPage].selectedAnswer = "B";
+    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lblAnswerB = lv_label_create(btnAnswerB);
+    lv_label_set_text(lblAnswerB, answerB);
+
+    // Antwort C hinzufügen
+    lv_obj_t* btnAnswerC = lv_btn_create(grid);
+    lv_obj_set_grid_cell(btnAnswerC, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 2, 1);
+    lv_obj_add_event_cb(btnAnswerC, [](lv_event_t* e) {
+        answers[currentPage].selectedAnswer = "C";
+    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lblAnswerC = lv_label_create(btnAnswerC);
+    lv_label_set_text(lblAnswerC, answerC);
+
+    // Antwort D hinzufügen
+    lv_obj_t* btnAnswerD = lv_btn_create(grid);
+    lv_obj_set_grid_cell(btnAnswerD, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_STRETCH, 2, 1);
+    lv_obj_add_event_cb(btnAnswerD, [](lv_event_t* e) {
+        answers[currentPage].selectedAnswer = "D";
+    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lblAnswerD = lv_label_create(btnAnswerD);
+    lv_label_set_text(lblAnswerD, answerD);
+
+    // Speichere die korrekte Antwort in der entsprechenden Struktur
+    int index = currentPage;
+    answers[index].correctAnswer = correctAnswer;
+}
+
+// Funktion zur Auswertung der Antworten
+void evaluateAnswers() {
+    int correctCount = 0;
+
+    for (int i = 0; i < 10; i++) {
+        if (answers[i].selectedAnswer != nullptr && strcmp(answers[i].correctAnswer, answers[i].selectedAnswer) == 0) {
+            correctCount++;
+        }
+    }
+
+    // Zeige die Ergebnisse auf der letzten Seite an
+    lv_obj_clean(grid); // Grid leeren
+
+    lv_obj_t* lblResults = lv_label_create(grid);
+    char resultText[50];
+    sprintf(resultText, "Du hast %d von 10 Fragen richtig beantwortet.", correctCount);
+    lv_label_set_text(lblResults, resultText);
+    lv_obj_set_grid_cell(lblResults, LV_GRID_ALIGN_CENTER, 0, 2, LV_GRID_ALIGN_CENTER, 0, 1);
+
+    // Erstelle einen Neustart-Button
+    restartBtn = lv_btn_create(grid);
+    lv_obj_t* restartLabel = lv_label_create(restartBtn);
+    lv_label_set_text(restartLabel, "Neu starten");
+    lv_obj_set_grid_cell(restartBtn, LV_GRID_ALIGN_CENTER, 0, 2, LV_GRID_ALIGN_CENTER, 1, 1);
+    lv_obj_add_event_cb(restartBtn, [](lv_event_t* e) {
+        currentPage = 0;
+        for (int i = 0; i < 10; i++) {
+            answers[i].selectedAnswer = nullptr; // Zurücksetzen der ausgewählten Antworten
+        }
+        createPage(currentPage);
+    }, LV_EVENT_CLICKED, NULL);
+}
+
+// Button-Matrix Event-Callback für Pagination und Antwortauswahl
+static void btnmatrix_event_cb(lv_event_t* e) {
+    lv_obj_t* obj = static_cast<lv_obj_t*>(lv_event_get_target(e));
+    uint32_t id = lv_btnmatrix_get_selected_btn(obj);
+
+    if (id == 0) {  // Vorherige Seite
+        currentPage = (currentPage - 1 + totalPages) % totalPages;
+        createPage(currentPage);
+    } else if (id == 1) {  // Nächste Seite oder Ergebnisseite
+        if (currentPage < 10) {
+            currentPage = (currentPage + 1) % totalPages;
+            createPage(currentPage);
+        } else {
+            evaluateAnswers();
+        }
+    }
+}
+
+// Funktion zum Erstellen einer Seite mit Inhalten
+void createPage(int page) {
+    // Lösche vorhandene Objekte im Grid
+    lv_obj_clean(grid);
+
+    // Je nach aktueller Seite Inhalte hinzufügen
+    switch (page) {
+        case 0:
+            addContentToGrid("Was ist die Hauptstadt von Frankreich?", "A) Paris", "B) London", "C) Berlin", "D) Rom", "A");
+            break;
+        case 1:
+            addContentToGrid("Was ist die Hauptstadt von Deutschland?", "A) Paris", "B) Berlin", "C) London", "D) Rom", "B");
+            break;
+        case 2:
+            addContentToGrid("Was ist die Hauptstadt von Italien?", "A) Rom", "B) Paris", "C) Berlin", "D) London", "A");
+            break;
+        case 3:
+            addContentToGrid("Was ist die Hauptstadt von Spanien?", "A) Madrid", "B) Barcelona", "C) Sevilla", "D) Valencia", "A");
+            break;
+        case 4:
+            addContentToGrid("Was ist die Hauptstadt von Portugal?", "A) Coimbra", "B) Porto", "C) Faro", "D) Lissabon", "D");
+            break;
+        case 5:
+            addContentToGrid("Was ist die Hauptstadt von Griechenland?", "A) Athen", "B) Thessaloniki", "C) Patras", "D) Heraklion", "A");
+            break;
+        case 6:
+            addContentToGrid("Was ist die Hauptstadt von Russland?", "A) Kasan", "B) Sankt Petersburg", "C) Moskau", "D) Nowosibirsk", "C");
+            break;
+        case 7:
+            addContentToGrid("Was ist die Hauptstadt von Japan?", "A) Kyoto", "B) Osaka", "C) Tokio", "D) Nagoya", "C");
+            break;
+        case 8:
+            addContentToGrid("Was ist die Hauptstadt von Australien?", "A) Sydney", "B) Canberra", "C) Melbourne", "D) Brisbane", "B");
+            break;
+        case 9:
+            addContentToGrid("Was ist die Hauptstadt von Kanada?", "A) Ottawa", "B) Toronto", "C) Vancouver", "D) Montreal", "A");
+            break;
+        case 10:
+            evaluateAnswers(); // Ergebnisseite anzeigen
+            break;
+    }
+}
+
+void setup() {
+    Display.begin();
+    TouchDetector.begin();
+
+    // Display-Setup
+    lv_obj_t* screen = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(screen, Display.width(), Display.height());
+
+    // Grid-Setup
+    static lv_coord_t col_dsc[] = {375, 375, LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t row_dsc[] = {200, 70, 70, LV_GRID_TEMPLATE_LAST};
+    grid = lv_obj_create(lv_scr_act());
+    lv_obj_set_grid_dsc_array(grid, col_dsc, row_dsc);
+    lv_obj_set_size(grid, Display.width(), Display.height());
+
+    // Erstelle Inhalte für die erste Seite
+    createPage(currentPage);
+
+    // Erstelle die Button-Matrix für die Pagination
+    static const char* map[] = {LV_SYMBOL_LEFT, LV_SYMBOL_RIGHT, ""};
+    btnm = lv_btnmatrix_create(lv_scr_act());
+    lv_btnmatrix_set_map(btnm, map);
+    lv_obj_set_size(btnm, Display.width(), 60);
+    lv_obj_set_pos(btnm, 0, Display.height() - 60);
+    lv_obj_add_event_cb(btnm, btnmatrix_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+void loop() {
+    lv_task_handler();  // LVGL Task-Handler aufrufen
+    delay(5);           // Kleine Verzögerung für die Schleife
