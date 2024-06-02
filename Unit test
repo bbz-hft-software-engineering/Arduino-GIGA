@@ -1,0 +1,54 @@
+#include <Arduino.h>
+#include <AUnit.h>
+
+// Struktur für die Antwortauswahl
+struct Answer {
+    const char* correctAnswer;    // Richtige Antwort
+    const char* selectedAnswer;   // Vom Benutzer ausgewählte Antwort
+};
+
+Answer answers[10]; // Array für die Antworten auf zehn Fragen
+
+// Funktion zur Auswertung der Antworten
+int evaluateAnswers() {
+    int correctCount = 0;
+    for (int i = 0; i < 10; i++) {
+        if (answers[i].selectedAnswer != nullptr && strcmp(answers[i].correctAnswer, answers[i].selectedAnswer) == 0) {
+            correctCount++;
+        }
+    }
+    return correctCount;
+}
+
+// Unit Tests
+test(evaluateAnswersTest) {
+    // Setze die Antworten für den Test
+    answers[0] = {"A", "A"};
+    answers[1] = {"B", "B"};
+    answers[2] = {"C", "C"};
+    answers[3] = {"D", "D"};
+    answers[4] = {"A", "B"}; // Falsch
+    answers[5] = {"B", "A"}; // Falsch
+    answers[6] = {"C", "D"}; // Falsch
+    answers[7] = {"D", "C"}; // Falsch
+    answers[8] = {"A", "A"};
+    answers[9] = {"B", "B"};
+
+    int correctCount = evaluateAnswers();
+
+    // Überprüfen, ob die Anzahl der korrekten Antworten korrekt ist
+    assertEqual(correctCount, 6);
+}
+
+void setup() {
+    // Initialisierung der seriellen Kommunikation
+    Serial.begin(9600);
+    while (!Serial) {
+        ; // Warten, bis die serielle Verbindung hergestellt ist
+    }
+
+    // Unit Test Runner starten
+    aunit::TestRunner::run();
+}
+
+
